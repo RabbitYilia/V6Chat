@@ -77,6 +77,7 @@ func main() {
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
 		ipv6Layer := &layers.IPv6{}
+		ipv6Layer.Version = uint8(6)
 		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")
 		ipv6Layer.DstIP = net.ParseIP("dddd:1234:5678::3")
 		ipv6Layer.Payload = []byte(input)

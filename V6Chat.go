@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"log"
 	"math/rand"
 	"net"
@@ -71,6 +74,10 @@ func main() {
 
 	var options gopacket.SerializeOptions
 	for {
+		SrcIPv6 := "dddd:1234:5678::2"
+		DstIPv6 := "dddd:1234:5678::3"
+		SrcPort := RandPort(1, 65535)
+		DstPort := RandPort(1, 65535)
 		buffer := gopacket.NewSerializeBuffer()
 		log.Println("Please input msg:")
 		inputReader := bufio.NewReader(os.Stdin)
@@ -81,14 +88,14 @@ func main() {
 			break
 		}
 		UDPLayer := &layers.UDP{}
-		UDPLayer.SrcPort = layers.UDPPort(RandPort(1, 65535))
-		UDPLayer.DstPort = layers.UDPPort(RandPort(1, 65535))
+		UDPLayer.SrcPort = layers.UDPPort(SrcPort)
+		UDPLayer.DstPort = layers.UDPPort(DstPort)
 		UDPLayer.Length = uint16(len([]byte(input)))
-		UDPLayer.Checksum = uint16(0)
+
 		ipv6Layer := &layers.IPv6{}
+		ipv6Layer.SrcIP = net.ParseIP(SrcIPv6)
+		ipv6Layer.DstIP = net.ParseIP(DstIPv6)
 		ipv6Layer.Version = uint8(6)
-		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")
-		ipv6Layer.DstIP = net.ParseIP("dddd:1234:5678::3")
 		ipv6Layer.HopLimit = uint8(64)
 		ipv6Layer.Length = uint16(len([]byte(input)) + 8)
 		ipv6Layer.NextHeader = layers.IPProtocolUDP
@@ -96,6 +103,12 @@ func main() {
 		EtherLayer.SrcMAC = net.HardwareAddr{0x00, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
 		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
 		EtherLayer.EthernetType = layers.EthernetTypeIPv6
+		FakeHeader := makeUDPFakeHeader(SrcIPv6, DstIPv6, ipv6Layer.Length, SrcPort, DstPort, UDPLayer.Length)
+		FakeHeaderbyte, err := hex.DecodeString(FakeHeader)
+		if err != nil {
+			log.Fatal(err)
+		}
+		UDPLayer.Checksum = checkSum(FakeHeaderbyte)
 		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer, UDPLayer, gopacket.Payload([]byte(input)))
 		outgoingPacket := buffer.Bytes()
 		err = handle.WritePacketData(outgoingPacket)
@@ -121,4 +134,73 @@ func recv(handle *pcap.Handle) {
 func RandPort(min, max int) int {
 	rand.Seed(time.Now().UnixNano() * rand.Int63n(100))
 	return min + rand.Intn(max-min+1)
+}
+
+func makeUDPFakeHeader(SrcIPv6 string, DstIPv6 string, v6len uint16, SrcPort int, DstPort int, udplen uint16) string {
+	UDPFakeHeader := ""
+	FakeUDPSrc, err := net.ParseIP(SrcIPv6).MarshalText()
+	if err != nil {
+		log.Fatal(err)
+	}
+	FakeUDPDst, err := net.ParseIP(DstIPv6).MarshalText()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var convbuffer bytes.Buffer
+	err = binary.Write(&convbuffer, binary.BigEndian, uint8(0))
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(FakeUDPSrc)
+	UDPFakeHeader += hex.EncodeToString(FakeUDPDst)
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, uint8(17))
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, v6len)
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, uint16(SrcPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, uint16(DstPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, udplen)
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	err = binary.Write(&convbuffer, binary.LittleEndian, uint16(0))
+	if err != nil {
+		log.Fatal(err)
+	}
+	UDPFakeHeader += hex.EncodeToString(convbuffer.Bytes())
+	convbuffer.Reset()
+	return UDPFakeHeader
+}
+
+func checkSum(msg []byte) uint16 {
+	sum := 0
+	for n := 1; n < len(msg)-1; n += 2 {
+		sum += int(msg[n])*256 + int(msg[n+1])
+	}
+	sum = (sum >> 16) + (sum & 0xffff)
+	sum += (sum >> 16)
+	var ans = uint16(^sum)
+	return ans
 }

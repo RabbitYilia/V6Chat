@@ -83,7 +83,8 @@ func main() {
 		EtherLayer := &layers.Ethernet{}
 		EtherLayer.SrcMAC = net.HardwareAddr{0xFF, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
 		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
-		gopacket.SerializeLayers(buffer, options, &layers.Ethernet{}, ipv6Layer)
+		EtherLayer.EthernetType = layers.EthernetTypeIPv6
+		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer)
 		outgoingPacket := buffer.Bytes()
 		err = handle.WritePacketData(outgoingPacket)
 		if err != nil {

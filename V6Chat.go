@@ -76,10 +76,14 @@ func main() {
 		input, err := inputReader.ReadString('\n')
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
+		if input == "" {
+			break
+		}
 		UDPLayer := &layers.UDP{}
 		UDPLayer.SrcPort = layers.UDPPort(8888)
 		UDPLayer.DstPort = layers.UDPPort(9999)
 		UDPLayer.Length = uint16(len([]byte(input)))
+		UDPLayer.Checksum = uint16(0)
 		ipv6Layer := &layers.IPv6{}
 		ipv6Layer.Version = uint8(6)
 		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")

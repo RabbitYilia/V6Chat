@@ -82,6 +82,9 @@ func main() {
 		log.Println("Please input msg:")
 		inputReader := bufio.NewReader(os.Stdin)
 		input, err := inputReader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
 		if input == "" {

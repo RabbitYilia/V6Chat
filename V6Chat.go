@@ -80,7 +80,7 @@ func main() {
 		input, err := inputReader.ReadString('\n')
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
-		gopacket.SerializeLayers(buffer, options, ipv6Layer, gopacket.Payload([]byte(input)))
+		gopacket.SerializeLayers(buffer, options, &layers.Ethernet{}, ipv6Layer, gopacket.Payload([]byte(input)))
 		outgoingPacket := buffer.Bytes()
 		err = handle.WritePacketData(outgoingPacket)
 		if err != nil {

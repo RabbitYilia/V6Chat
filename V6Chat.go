@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -80,8 +81,8 @@ func main() {
 			break
 		}
 		UDPLayer := &layers.UDP{}
-		UDPLayer.SrcPort = layers.UDPPort(8888)
-		UDPLayer.DstPort = layers.UDPPort(9999)
+		UDPLayer.SrcPort = layers.UDPPort(RandPort(1, 65535))
+		UDPLayer.DstPort = layers.UDPPort(RandPort(1, 65535))
 		UDPLayer.Length = uint16(len([]byte(input)))
 		UDPLayer.Checksum = uint16(0)
 		ipv6Layer := &layers.IPv6{}
@@ -115,4 +116,9 @@ func recv(handle *pcap.Handle) {
 		log.Printf("From %s to %s\n", ipv6.SrcIP, ipv6.DstIP)
 		log.Println(ipv6Layer.LayerPayload())
 	}
+}
+
+func RandPort(min, max int) int {
+	rand.Seed(time.Now().UnixNano())
+	return min + rand.Intn(max-min+1)
 }

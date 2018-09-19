@@ -119,6 +119,6 @@ func recv(handle *pcap.Handle) {
 }
 
 func RandPort(min, max int) int {
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(time.Now().UnixNano() * rand.Int63n(100))
 	return min + rand.Intn(max-min+1)
 }

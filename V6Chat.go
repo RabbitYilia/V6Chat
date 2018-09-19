@@ -76,18 +76,20 @@ func main() {
 		input, err := inputReader.ReadString('\n')
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
+		UDPLayer := &layers.UDP{}
+		UDPLayer.SrcPort = layers.UDPPort(8888)
+		UDPLayer.DstPort = layers.UDPPort(9999)
 		ipv6Layer := &layers.IPv6{}
 		ipv6Layer.Version = uint8(6)
 		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")
 		ipv6Layer.DstIP = net.ParseIP("dddd:1234:5678::3")
-		ipv6Layer.Payload = []byte(input)
 		ipv6Layer.HopLimit = uint8(64)
-		ipv6Layer.Length = uint16(len(ipv6Layer.Payload))
+		ipv6Layer.NextHeader = layers.IPProtocolUDP
 		EtherLayer := &layers.Ethernet{}
-		EtherLayer.SrcMAC = net.HardwareAddr{0xFF, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
+		EtherLayer.SrcMAC = net.HardwareAddr{0x00, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
 		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
 		EtherLayer.EthernetType = layers.EthernetTypeIPv6
-		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer)
+		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer, UDPLayer, gopacket.Payload([]byte(input)))
 		outgoingPacket := buffer.Bytes()
 		err = handle.WritePacketData(outgoingPacket)
 		if err != nil {

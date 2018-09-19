@@ -81,6 +81,8 @@ func main() {
 		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")
 		ipv6Layer.DstIP = net.ParseIP("dddd:1234:5678::3")
 		ipv6Layer.Payload = []byte(input)
+		ipv6Layer.HopLimit = uint8(64)
+		ipv6Layer.Length = uint16(len(ipv6Layer.Payload))
 		EtherLayer := &layers.Ethernet{}
 		EtherLayer.SrcMAC = net.HardwareAddr{0xFF, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
 		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}

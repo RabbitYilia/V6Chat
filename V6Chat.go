@@ -71,16 +71,19 @@ func main() {
 	var options gopacket.SerializeOptions
 	for {
 		buffer := gopacket.NewSerializeBuffer()
-		ipv6Layer := &layers.IPv6{
-			SrcIP: net.ParseIP("dddd:1234:5678::2"),
-			DstIP: net.ParseIP("dddd:1234:5678::3"),
-		}
 		log.Println("Please input msg:")
 		inputReader := bufio.NewReader(os.Stdin)
 		input, err := inputReader.ReadString('\n')
 		input = strings.Trim(input, "\n")
 		input = strings.Trim(input, "\r")
-		gopacket.SerializeLayers(buffer, options, &layers.Ethernet{}, ipv6Layer, gopacket.Payload([]byte(input)))
+		ipv6Layer := &layers.IPv6{}
+		ipv6Layer.SrcIP = net.ParseIP("dddd:1234:5678::2")
+		ipv6Layer.DstIP = net.ParseIP("dddd:1234:5678::3")
+		ipv6Layer.Payload = []byte(input)
+		EtherLayer := &layers.Ethernet{}
+		EtherLayer.SrcMAC = net.HardwareAddr{0xFF, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
+		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
+		gopacket.SerializeLayers(buffer, options, &layers.Ethernet{}, ipv6Layer)
 		outgoingPacket := buffer.Bytes()
 		err = handle.WritePacketData(outgoingPacket)
 		if err != nil {

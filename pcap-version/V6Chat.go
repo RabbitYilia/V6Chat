@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"math/rand"
 	"net"
@@ -17,6 +18,8 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 )
+
+var IPMap []net.IP
 
 func main() {
 	// Find all devices
@@ -71,14 +74,31 @@ func main() {
 		log.Fatal(err)
 	}
 	go recv(handle)
+	TXLoop(handle)
+}
 
-	var options gopacket.SerializeOptions
+func TXLoop(handle *pcap.Handle) {
+	buffer := gopacket.NewSerializeBuffer()
+	options := gopacket.SerializeOptions{}
+	input := GetInput("Dst IP")
+	DstIP := net.ParseIP(input)
+	if DstIP == nil {
+		log.Fatal("Invaild Addr")
+	}
 	for {
-		SrcIPv6 := "dddd:1234:5678::2"
-		DstIPv6 := "dddd:1234:5678::3"
-		SrcPort := RandPort(1, 65535)
-		DstPort := RandPort(1, 65535)
-		buffer := gopacket.NewSerializeBuffer()
+		SrcIP := IPMap[RandInt(0, len(IPMap)-1)]
+		SrcPort := RandInt(1, 65535)
+		DstPort := RandInt(1, 65535)
+		err := buffer.Clear()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		EtherLayer := &layers.Ethernet{}
+		EtherLayer.SrcMAC = net.HardwareAddr{0x00, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
+		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
+		EtherLayer.EthernetType = layers.EthernetTypeIPv6
+
 		log.Println("Please input msg:")
 		inputReader := bufio.NewReader(os.Stdin)
 		input, err := inputReader.ReadString('\n')
@@ -90,31 +110,39 @@ func main() {
 		if input == "" {
 			break
 		}
+
+		TXData := make(map[string]string)
+		TXData["Timestamp"] = strconv.FormatInt(time.Now().UnixNano(), 10)
+		TXData["Msg"] = input
+		TXJson, err := json.Marshal(TXData)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		UDPLayer := &layers.UDP{}
 		UDPLayer.SrcPort = layers.UDPPort(SrcPort)
 		UDPLayer.DstPort = layers.UDPPort(DstPort)
-		UDPLayer.Length = uint16(len([]byte(input)))
+		UDPLayer.Length = uint16(len(TXJson) + 8)
 
 		ipv6Layer := &layers.IPv6{}
-		ipv6Layer.SrcIP = net.ParseIP(SrcIPv6)
-		ipv6Layer.DstIP = net.ParseIP(DstIPv6)
+		ipv6Layer.SrcIP = SrcIP
+		ipv6Layer.DstIP = DstIP
 		ipv6Layer.Version = uint8(6)
 		ipv6Layer.HopLimit = uint8(64)
-		ipv6Layer.Length = uint16(len([]byte(input)) + 8)
+		ipv6Layer.Length = uint16(UDPLayer.Length)
 		ipv6Layer.NextHeader = layers.IPProtocolUDP
-		EtherLayer := &layers.Ethernet{}
-		EtherLayer.SrcMAC = net.HardwareAddr{0x00, 0xAA, 0xFA, 0xAA, 0xFF, 0xAA}
-		EtherLayer.DstMAC = net.HardwareAddr{0xBD, 0xBD, 0xBD, 0xBD, 0xBD, 0xBD}
-		EtherLayer.EthernetType = layers.EthernetTypeIPv6
-		FakeHeader := makeUDPFakeHeader(SrcIPv6, DstIPv6, ipv6Layer.Length, SrcPort, DstPort, UDPLayer.Length)
+
+		FakeHeader := makeUDPFakeHeader(SrcIP, DstIP, ipv6Layer.Length, SrcPort, DstPort, UDPLayer.Length)
 		FakeHeaderbyte, err := hex.DecodeString(FakeHeader)
 		if err != nil {
 			log.Fatal(err)
 		}
 		UDPLayer.Checksum = checkSum(FakeHeaderbyte)
-		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer, UDPLayer, gopacket.Payload([]byte(input)))
-		outgoingPacket := buffer.Bytes()
-		err = handle.WritePacketData(outgoingPacket)
+
+		gopacket.SerializeLayers(buffer, options, EtherLayer, ipv6Layer, UDPLayer)
+		TXPacket := append(buffer.Bytes(), TXJson...)
+
+		err = handle.WritePacketData(TXPacket)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -139,13 +167,13 @@ func RandPort(min, max int) int {
 	return min + rand.Intn(max-min+1)
 }
 
-func makeUDPFakeHeader(SrcIPv6 string, DstIPv6 string, v6len uint16, SrcPort int, DstPort int, udplen uint16) string {
+func makeUDPFakeHeader(SrcIPv6 net.IP, DstIPv6 net.IP, v6len uint16, SrcPort int, DstPort int, udplen uint16) string {
 	UDPFakeHeader := ""
-	FakeUDPSrc, err := net.ParseIP(SrcIPv6).MarshalText()
+	FakeUDPSrc, err := SrcIPv6.MarshalText()
 	if err != nil {
 		log.Fatal(err)
 	}
-	FakeUDPDst, err := net.ParseIP(DstIPv6).MarshalText()
+	FakeUDPDst, err := DstIPv6.MarshalText()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -206,4 +234,27 @@ func checkSum(msg []byte) uint16 {
 	sum += (sum >> 16)
 	var ans = uint16(^sum)
 	return ans
+}
+
+func RandInt(min, max int) int {
+	rand.Seed(time.Now().UnixNano() * rand.Int63n(100))
+	return min + rand.Intn(max-min+1)
+}
+
+func GetInput(tip string) string {
+	for {
+		log.Println("Please input " + tip + ":")
+		inputReader := bufio.NewReader(os.Stdin)
+		input, err := inputReader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+		input = strings.Trim(input, "\n")
+		input = strings.Trim(input, "\r")
+		if input == "" {
+			break
+		}
+		return input
+	}
+	return ""
 }
